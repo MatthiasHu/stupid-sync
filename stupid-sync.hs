@@ -66,13 +66,18 @@ data ServerState = ServerState
 main :: IO ()
 main = do
   args <- getArgs
-  when (null args) $ do
-    putStrLn "give data directory as first argument"
-    exitFailure
+  when (null args) exitWrongArguments
   let dir = head args
-      s = ServerState Map.empty 0 dir
+  validDir <- doesDirectoryExist dir
+  when (not validDir) exitWrongArguments
+  let s = ServerState Map.empty 0 dir
   state <- newMVar s
   runServer "127.0.0.1" 39141 (app state)
+
+exitWrongArguments :: IO ()
+exitWrongArguments = do
+  putStrLn "give data directory as first argument"
+  exitFailure
 
 app :: MVar ServerState -> ServerApp
 app state pendingConn = do
@@ -111,10 +116,12 @@ addClient state so conn = modifyMVar state $ \s -> return $
 
 -- Remove client from list.
 removeClient :: MVar ServerState -> SyncObject -> ClientID -> IO ()
-removeClient state so id = modifyMVar_ state $ \s -> return $
-  let inner = Map.findWithDefault Map.empty so (clients s)
-      clients' = Map.insert so (Map.delete id inner) (clients s)
-  in s { clients = clients' }
+removeClient state so id = do
+  putStrLn ("Removing client " ++ show id)
+  modifyMVar_ state $ \s -> return $
+    let inner = Map.findWithDefault Map.empty so (clients s)
+        clients' = Map.insert so (Map.delete id inner) (clients s)
+    in s { clients = clients' }
 
 -- Update and relay sync data from this client.
 listenTo :: MVar ServerState -> SyncObject -> Connection -> IO ()
