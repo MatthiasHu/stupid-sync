@@ -72,7 +72,10 @@ main = do
   when (not validDir) exitWrongArguments
   let s = ServerState Map.empty 0 dir
   state <- newMVar s
-  runServer "127.0.0.1" 39141 (app state)
+  runServer addr port (app state)
+  where
+    addr = "192.168.178.26"
+    port = 39141
 
 exitWrongArguments :: IO ()
 exitWrongArguments = do
