@@ -12,6 +12,7 @@ import Control.Exception
 import Control.Concurrent.MVar
 import Control.Concurrent
 import Control.Monad
+import Data.Functor
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS.Char8
 import Data.Word
@@ -30,10 +31,16 @@ newtype SyncObject = SyncObject FilePath
 
 validateSyncObjectPath :: BS.ByteString -> Maybe SyncObject
 validateSyncObjectPath path = do
-  parts <- BS.split (word8 '/')  <$> BS.stripPrefix "/" path
+  parts <- BS.split (word8 '/') <$> stripPrefix "/" path
   guard $ all ($ parts) objectPathChecks
   return . SyncObject . joinPath $
     map (fromString . BS.Char8.unpack) parts
+
+-- drop-in for BS.stripPrefix in bytestring >= 0.10.8
+stripPrefix :: BS.ByteString -> BS.ByteString -> Maybe BS.ByteString
+stripPrefix a b =
+  if a `BS.isPrefixOf` b then Just (BS.drop (BS.length a) b)
+  else Nothing
 
 word8 :: Char -> Word8
 word8 = fromIntegral . ord
