@@ -29,9 +29,12 @@ function reconnect() {
   console.log("reconnecting.");
 
   if (socket != null) {
-    disableDataArea();
+    socket.onopen = null;
+    socket.onerror = null;
+    socket.onclose = null;
+    socket.onmessage = null;
     socket.close();
-    socket = null;
+    socketClosed();
   }
 
   socket = new WebSocket(domain + nameInput.value);
