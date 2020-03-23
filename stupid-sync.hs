@@ -81,7 +81,7 @@ main = do
   state <- newMVar s
   runServer addr port (app state)
   where
-    addr = "192.168.178.26"
+    addr = "127.0.0.1"
     port = 39141
 
 exitWrongArguments :: IO ()
