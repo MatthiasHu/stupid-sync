@@ -15,26 +15,21 @@ import Control.Monad
 import Data.Functor
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS.Char8
-import Data.Word
-import Data.Char
-import Data.String
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 
--- Objects to be synced are identified by the file path
--- relative to the storage directory.
--- (The path shall undergo security checks before being
+-- Objects to be synced are identified by the file name.
+-- (The name must undergo security checks before being
 -- wrapped in SyncObject.)
 newtype SyncObject = SyncObject FilePath
   deriving (Show, Eq, Ord)
 
 validateSyncObjectPath :: BS.ByteString -> Maybe SyncObject
 validateSyncObjectPath path = do
-  parts <- BS.split (word8 '/') <$> stripPrefix "/" path
-  guard $ all ($ parts) objectPathChecks
-  return . SyncObject . joinPath $
-    map (fromString . BS.Char8.unpack) parts
+  name <- BS.Char8.unpack <$> stripPrefix "/" path
+  guard $ all ($ name) objectNameChecks
+  return (SyncObject name)
 
 -- drop-in for BS.stripPrefix in bytestring >= 0.10.8
 stripPrefix :: BS.ByteString -> BS.ByteString -> Maybe BS.ByteString
@@ -42,25 +37,19 @@ stripPrefix a b =
   if a `BS.isPrefixOf` b then Just (BS.drop (BS.length a) b)
   else Nothing
 
-word8 :: Char -> Word8
-word8 = fromIntegral . ord
-
-chr' :: Word8 -> Char
-chr' = chr . fromIntegral
-
-objectPathChecks :: [[BS.ByteString] -> Bool]
-objectPathChecks =
+objectNameChecks :: [String -> Bool]
+objectNameChecks =
   [ not . null
-  , (<=20) . length
-  , all (not . BS.null)
-  , all ((<=100) . BS.length)
-  , all (all allowedChar . BS.Char8.unpack)
-  , all (not . BS.isPrefixOf ".")
+  , (<=100) . length
+  , all isAllowedChar
   ]
 
-allowedChar :: Char -> Bool
-allowedChar = flip Set.member . Set.fromList $
-  ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['.', '-', '_']
+isAllowedChar :: Char -> Bool
+isAllowedChar = (`Set.member` setOfAllowedChars)
+
+setOfAllowedChars :: Set.Set Char
+setOfAllowedChars = Set.fromList $
+  ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['-', '_']
 
 type ClientID = Int
 
@@ -77,6 +66,7 @@ main = do
   let dir = head args
   validDir <- doesDirectoryExist dir
   when (not validDir) exitWrongArguments
+  putStrLn ("using data directory " ++ dir)
   let s = ServerState Map.empty 0 dir
   state <- newMVar s
   runServer addr port (app state)
@@ -109,12 +99,15 @@ app state pendingConn = do
 -- Send sync data from file if existent.
 sendInitialSyncData ::
   MVar ServerState -> SyncObject -> Connection -> IO ()
-sendInitialSyncData state (SyncObject soPath) conn = do
+sendInitialSyncData state so conn = do
   s <- readMVar state
-  syncData <- BS.readFile (dataDir s </> soPath)
+  syncData <- BS.readFile (syncObjectFilePath s so)
     `catch` (\e -> if isDoesNotExistError e then return BS.empty
                    else throwIO e)
   sendBinaryData conn syncData
+
+syncObjectFilePath :: ServerState -> SyncObject -> FilePath
+syncObjectFilePath s (SyncObject soName) = dataDir s </> soName
 
 -- Add new client to the list and return the new id.
 addClient :: MVar ServerState -> SyncObject -> Connection -> IO ClientID
@@ -148,7 +141,5 @@ broadcastData s so syncData =
     sendBinaryData conn syncData
 
 saveData :: ServerState -> SyncObject -> BS.ByteString -> IO ()
-saveData s (SyncObject path) syncData = do
-  let fullPath = dataDir s </> path
-  createDirectoryIfMissing True (takeDirectory fullPath)
-  BS.writeFile fullPath syncData
+saveData s so syncData =
+  BS.writeFile (syncObjectFilePath s so) syncData
