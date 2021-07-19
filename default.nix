@@ -1,5 +1,5 @@
-{ mkDerivation, base, bytestring, containers, directory, filepath
-, stdenv, websockets
+{ lib, mkDerivation, base, bytestring, containers, directory, filepath
+, websockets
 }:
 mkDerivation {
   pname = "stupid-sync";
@@ -11,5 +11,5 @@ mkDerivation {
     base bytestring containers directory filepath websockets
   ];
   description = "stupid-sync server for synchronization over WebSockets";
-  license = stdenv.lib.licenses.gpl3;
+  license = lib.licenses.gpl3;
 }
